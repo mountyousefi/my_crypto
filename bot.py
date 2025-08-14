@@ -17,7 +17,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_photo(open(chart_file, 'rb'))
 
 if __name__ == "__main__":
-    TOKEN = "8414262295:AAFK0cpebeTl6vb_N32rjDC2ejAhpL-Wn_A"
+    TOKEN = "8393971789:AAGbNCPDyRfVhdd-ReFpP_VPWwVgR5OaDkI"
     app = ApplicationBuilder().token(TOKEN).build()
     
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
