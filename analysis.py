@@ -10,7 +10,7 @@ def simple_analysis(symbol):
             symbol += '-USD'
 
         # دریافت داده 7 روز گذشته با بازه 1 ساعت
-        data = yf.download(symbol, period="7d", interval="1h")
+        data = yf.download(symbol, period="30d", interval="1d")
         close = data['Close']
 
         if close.empty:
