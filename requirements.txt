@@ -1,7 +1,4 @@
-python-telegram-bot
-yfinance
-matplotlib
-fastapi
-uvicorn[standard]
-requests
-pandas
+ccxt==3.0.86
+pandas==2.1.1
+pandas_ta==0.3.21b0
+python-telegram-bot==13.21

@@ -1,65 +1,72 @@
-# bot.py
-from telegram import Update, Bot
-from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
-from analysis import simple_analysis, plot_chart
-from fastapi import FastAPI, Request
+import ccxt
+import pandas as pd
+import pandas_ta as ta
+from datetime import datetime
 
-TOKEN = "8393971789:AAGbNCPDyRfVhdd-ReFpP_VPWwVgR5OaDkI"
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Updater, CommandHandler, CallbackQueryHandler
 
-# اپلیکیشن تلگرام
-app_telegram = ApplicationBuilder().token(TOKEN).build()
+# ----------- تحلیل تکنیکال -----------
+def get_crypto_analysis(symbol="BTC/USDT", timeframe="1h", limit=100):
+    exchange = ccxt.binance()
+    ohlcv = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
+    
+    df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    symbol_input = update.message.text.strip().upper()
+    df['RSI'] = ta.rsi(df['close'], length=14)
+    macd = ta.macd(df['close'])
+    df['MACD'] = macd['MACD_12_26_9']
+    df['Signal'] = macd['MACDs_12_26_9']
+    df['EMA20'] = ta.ema(df['close'], length=20)
 
-    try:
-        simple_result = simple_analysis(symbol_input)
-        chart_file = plot_chart(symbol_input)
+    last_row = df.iloc[-1]
 
-        await update.message.reply_text(simple_result)
+    analysis_text = f"""
+📊 تحلیل تکنیکال {symbol} ({timeframe})
 
-        # ارسال تصویر اگر موجود بود
-        if chart_file:
-            try:
-                with open(chart_file, 'rb') as photo:
-                    await update.message.reply_photo(photo)
-            except Exception as e:
-                await update.message.reply_text(f"خطا در ارسال تصویر: {e}")
-        else:
-            await update.message.reply_text("نمودار موجود نیست.")
+💰 قیمت فعلی: {last_row['close']:.2f} USDT
+📅 زمان: {last_row['timestamp']}
 
-    except Exception as e:
-        await update.message.reply_text(f"خطا در تحلیل {symbol_input}: {e}")
+📈 RSI (14): {last_row['RSI']:.2f} → {"خرید بیش از حد" if last_row['RSI'] > 70 else "فروش بیش از حد" if last_row['RSI'] < 30 else "نرمال"}
+📉 MACD: {last_row['MACD']:.2f}
+📉 Signal: {last_row['Signal']:.2f}
+📊 EMA20: {last_row['EMA20']:.2f}
 
-# اضافه کردن هندلر
-app_telegram.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+⚠️ این تحلیل صرفاً جهت اطلاع است و توصیه سرمایه‌گذاری نیست.
+"""
+    return analysis_text
 
-# اپلیکیشن FastAPI
-app_fastapi = FastAPI()
+# ----------- دکمه‌ها و هندلرها -----------
+def start(update, context):
+    keyboard = [
+        [InlineKeyboardButton("BTC/USDT", callback_data='BTC/USDT')],
+        [InlineKeyboardButton("ETH/USDT", callback_data='ETH/USDT')],
+        [InlineKeyboardButton("BNB/USDT", callback_data='BNB/USDT')],
+        [InlineKeyboardButton("SOL/USDT", callback_data='SOL/USDT')],
+        [InlineKeyboardButton("ADA/USDT", callback_data='ADA/USDT')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    update.message.reply_text("ارز مورد نظر را انتخاب کنید:", reply_markup=reply_markup)
 
-# اجرای اپلیکیشن تلگرام هنگام شروع
-@app_fastapi.on_event("startup")
-async def startup():
-    await app_telegram.initialize()
-    await app_telegram.start()
-    print("Bot started and ready to receive messages.")
+def button_callback(update, context):
+    query = update.callback_query
+    query.answer()
+    symbol = query.data
+    analysis = get_crypto_analysis(symbol)
+    query.edit_message_text(text=analysis)
 
-# توقف اپلیکیشن تلگرام هنگام خاموش شدن
-@app_fastapi.on_event("shutdown")
-async def shutdown():
-    await app_telegram.stop()
-    await app_telegram.shutdown()
-    print("Bot stopped.")
+# ----------- راه‌اندازی ربات -----------
+def main():
+    TOKEN = "8393971789:AAGbNCPDyRfVhdd-ReFpP_VPWwVgR5OaDkI"  # اینو با توکن رباتت عوض کن
+    updater = Updater(TOKEN, use_context=True)
+    dp = updater.dispatcher
 
-# وبهوک تلگرام
-@app_fastapi.post(f"/{TOKEN}")
-async def telegram_webhook(request: Request):
-    data = await request.json()
-    update = Update.de_json(data, Bot(TOKEN))
-    await app_telegram.update_queue.put(update)
-    return {"ok": True}
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CallbackQueryHandler(button_callback))
 
-# اجرای لوکال (در Render نیازی به این بخش نیست)
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app_fastapi, host="0.0.0.0", port=8443)
+    updater.start_polling()
+    updater.idle()
+
+if __name__ == '__main__':
+    main()
