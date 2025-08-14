@@ -5,7 +5,7 @@ from analysis import simple_analysis, plot_chart
 from fastapi import FastAPI, Request
 import asyncio
 
-TOKEN = "TELEGRAM_BOT_TOKEN_تو_اینجا"
+TOKEN = "8393971789:AAGbNCPDyRfVhdd-ReFpP_VPWwVgR5OaDkI"
 
 # اپلیکیشن تلگرام
 app_telegram = ApplicationBuilder().token(TOKEN).build()
