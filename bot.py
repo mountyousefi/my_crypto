@@ -1,9 +1,8 @@
-# bot_webhook_fastapi.py
+# bot.py
 from telegram import Update, Bot
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 from analysis import simple_analysis, plot_chart
 from fastapi import FastAPI, Request
-import asyncio
 
 TOKEN = "8393971789:AAGbNCPDyRfVhdd-ReFpP_VPWwVgR5OaDkI"
 
@@ -11,23 +10,26 @@ TOKEN = "8393971789:AAGbNCPDyRfVhdd-ReFpP_VPWwVgR5OaDkI"
 app_telegram = ApplicationBuilder().token(TOKEN).build()
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    symbol = update.message.text.upper()
+    symbol_input = update.message.text.strip().upper()
 
     try:
-        simple_result = simple_analysis(symbol)
-        chart_file = plot_chart(symbol)
+        simple_result = simple_analysis(symbol_input)
+        chart_file = plot_chart(symbol_input)
 
         await update.message.reply_text(simple_result)
 
-        # ارسال تصویر با کنترل خطا
-        try:
-            with open(chart_file, 'rb') as photo:
-                await update.message.reply_photo(photo)
-        except Exception as e:
-            await update.message.reply_text(f"خطا در ارسال تصویر: {e}")
+        # ارسال تصویر اگر موجود بود
+        if chart_file:
+            try:
+                with open(chart_file, 'rb') as photo:
+                    await update.message.reply_photo(photo)
+            except Exception as e:
+                await update.message.reply_text(f"خطا در ارسال تصویر: {e}")
+        else:
+            await update.message.reply_text("نمودار موجود نیست.")
 
     except Exception as e:
-        await update.message.reply_text(f"خطا: {e}")
+        await update.message.reply_text(f"خطا در تحلیل {symbol_input}: {e}")
 
 # اضافه کردن هندلر
 app_telegram.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
