@@ -2,6 +2,5 @@ python-telegram-bot==20.7
 ccxt==4.1.64
 pandas==2.1.4
 numpy==1.25.2
-TA-Lib==0.4.28
 flask==3.0.0
 requests==2.31.0

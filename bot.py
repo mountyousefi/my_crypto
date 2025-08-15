@@ -7,7 +7,6 @@ import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from flask import Flask, request
-import talib
 from datetime import datetime
 
 # Enable logging
@@ -77,40 +76,74 @@ def fetch_ohlcv_data(symbol: str, timeframe: str = '4h', limit: int = 100):
         logger.error(f"Error fetching data for {symbol}: {e}")
         return None
 
+def calculate_rsi(prices, window=14):
+    """Calculate RSI using pandas."""
+    delta = prices.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
+    rs = gain / loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
+
+def calculate_macd(prices, fast=12, slow=26, signal=9):
+    """Calculate MACD using pandas."""
+    ema_fast = prices.ewm(span=fast).mean()
+    ema_slow = prices.ewm(span=slow).mean()
+    macd = ema_fast - ema_slow
+    macd_signal = macd.ewm(span=signal).mean()
+    macd_histogram = macd - macd_signal
+    return macd, macd_signal, macd_histogram
+
+def calculate_bollinger_bands(prices, window=20, num_std=2):
+    """Calculate Bollinger Bands using pandas."""
+    rolling_mean = prices.rolling(window=window).mean()
+    rolling_std = prices.rolling(window=window).std()
+    upper_band = rolling_mean + (rolling_std * num_std)
+    lower_band = rolling_mean - (rolling_std * num_std)
+    return upper_band, rolling_mean, lower_band
+
+def calculate_stochastic(high, low, close, k_window=14, d_window=3):
+    """Calculate Stochastic oscillator using pandas."""
+    lowest_low = low.rolling(window=k_window).min()
+    highest_high = high.rolling(window=k_window).max()
+    k_percent = 100 * ((close - lowest_low) / (highest_high - lowest_low))
+    d_percent = k_percent.rolling(window=d_window).mean()
+    return k_percent, d_percent
+
 def technical_analysis(df):
-    """Perform technical analysis using TA-Lib."""
+    """Perform technical analysis using pandas."""
     try:
-        # Convert to numpy arrays
-        close = df['close'].values
-        high = df['high'].values
-        low = df['low'].values
-        volume = df['volume'].values
+        # Extract series
+        close = df['close']
+        high = df['high']
+        low = df['low']
+        volume = df['volume']
         
         # Technical indicators
         # RSI (14 periods)
-        rsi = talib.RSI(close, timeperiod=14)[-1]
+        rsi = calculate_rsi(close, 14).iloc[-1]
         
         # MACD
-        macd, macdsignal, macdhist = talib.MACD(close, fastperiod=12, slowperiod=26, signalperiod=9)
-        macd_val = macd[-1]
-        signal_val = macdsignal[-1]
+        macd, macd_signal, macd_hist = calculate_macd(close, 12, 26, 9)
+        macd_val = macd.iloc[-1]
+        signal_val = macd_signal.iloc[-1]
         
         # Moving Averages
-        sma_20 = talib.SMA(close, timeperiod=20)[-1]
-        ema_20 = talib.EMA(close, timeperiod=20)[-1]
+        sma_20 = close.rolling(window=20).mean().iloc[-1]
+        ema_20 = close.ewm(span=20).mean().iloc[-1]
         
         # Bollinger Bands
-        bb_upper, bb_middle, bb_lower = talib.BBANDS(close, timeperiod=20, nbdevup=2, nbdevdn=2)
-        bb_upper_val = bb_upper[-1]
-        bb_lower_val = bb_lower[-1]
+        bb_upper, bb_middle, bb_lower = calculate_bollinger_bands(close, 20, 2)
+        bb_upper_val = bb_upper.iloc[-1]
+        bb_lower_val = bb_lower.iloc[-1]
         
         # Stochastic
-        slowk, slowd = talib.STOCH(high, low, close, fastk_period=14, slowk_period=3, slowd_period=3)
-        stoch_k = slowk[-1]
-        stoch_d = slowd[-1]
+        stoch_k, stoch_d = calculate_stochastic(high, low, close, 14, 3)
+        stoch_k_val = stoch_k.iloc[-1]
+        stoch_d_val = stoch_d.iloc[-1]
         
         # Current price
-        current_price = close[-1]
+        current_price = close.iloc[-1]
         
         return {
             'current_price': current_price,
@@ -121,8 +154,8 @@ def technical_analysis(df):
             'ema_20': ema_20,
             'bb_upper': bb_upper_val,
             'bb_lower': bb_lower_val,
-            'stoch_k': stoch_k,
-            'stoch_d': stoch_d
+            'stoch_k': stoch_k_val,
+            'stoch_d': stoch_d_val
         }
     except Exception as e:
         logger.error(f"Technical analysis error: {e}")
